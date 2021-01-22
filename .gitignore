@@ -1,0 +1,5 @@
+code/.ipynb_checkpoints/
+code/__pycache__/
+.huggingface_cache/
+tmp/
+data_files/
