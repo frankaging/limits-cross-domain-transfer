@@ -3,7 +3,7 @@
 
 # #### this is the main script for running pretrain scripts for BERT
 
-# In[1]:
+# In[ ]:
 
 
 # coding=utf-8
@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from datasets import load_dataset
+from datasets import DatasetDict
 
 import transformers
 from transformers import (
@@ -57,7 +58,7 @@ MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
-# In[2]:
+# In[ ]:
 
 
 @dataclass
@@ -160,15 +161,10 @@ class DataTrainingArguments:
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
         else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+            pass
 
 
-# In[3]:
+# In[ ]:
 
 
 def main(corrupted_vocab):
@@ -219,15 +215,8 @@ def main(corrupted_vocab):
     set_seed(training_args.seed)
 
     # load from pre-processed wikitext data files
-    data_files = {}
     if data_args.train_file is not None:
-        data_files["train"] = data_args.train_file
-    if data_args.validation_file is not None:
-        data_files["validation"] = data_args.validation_file
-    extension = data_args.train_file.split(".")[-1]
-    if extension == "txt":
-        extension = "text"
-    datasets = load_dataset(extension, data_files=data_files)
+        datasets = DatasetDict.load_from_disk(data_args.train_file)
 
     # Load pretrained model and tokenizer
     #
@@ -250,23 +239,11 @@ def main(corrupted_vocab):
     # this is our own tokenizer
     if corrupted_vocab:
         logger.warning("You are using a corrupted version of vocab!")
-        tokenizer = transformers.BertTokenizer(vocab_file="../data_files/bert_vocab_mismatch.txt")
+        tokenizer = transformers.BertTokenizer(vocab_file="../data_files/bert_vocab_mismatch.txt", 
+                                               max_seq_length=data_args.max_seq_length)
     else:
-        tokenizer_kwargs = {
-            "cache_dir": model_args.cache_dir,
-            "use_fast": model_args.use_fast_tokenizer,
-            "revision": model_args.model_revision,
-            "use_auth_token": True if model_args.use_auth_token else None,
-        }
-        if model_args.tokenizer_name:
-            tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
-        elif model_args.model_name_or_path:
-            tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
-        else:
-            raise ValueError(
-                "You are instantiating a new tokenizer from scratch. This is not supported by this script."
-                "You can do it from another script, save it, and load it from here, using --tokenizer_name."
-            )
+        tokenizer = transformers.BertTokenizer(vocab_file="../data_files/bert_vocab.txt", 
+                                               max_seq_length=data_args.max_seq_length)
 
     if model_args.model_name_or_path:
         model = AutoModelForMaskedLM.from_pretrained(
@@ -435,6 +412,28 @@ def main(corrupted_vocab):
 
 
 if __name__ == "__main__":
-    corrupted_vocab = True
+    parser = argparse.ArgumentParser()
+    ## this is for our own purpose
+    parser.add_argument("--bert_version",
+                        default="corrupted",
+                        type=str)
+    args = parser.parse_args()
+    corrupted_vocab = False
+    if args.bert_version == "corrupted":
+        print("****************************************")
+        print("*                                      *")
+        print("* you are working with corrupted BERT! *")
+        print("*                                      *")
+        print("****************************************")
+        corrupted_vocab = True
     main(corrupted_vocab)
+
+
+# In[ ]:
+
+
+# datasets = load_dataset("wikitext", "wikitext-103-v1", cache_dir="../.huggingface_cache/")
+# print(len(datasets["train"]))
+# datasets["train"] = datasets["train"].select(range(int(len(datasets["train"])*0.15)))
+# datasets.save_to_disk("../data_files/wikitext-15M")
 

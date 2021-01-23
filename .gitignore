@@ -1,3 +1,4 @@
+code/wandb/
 code/.ipynb_checkpoints/
 code/__pycache__/
 .huggingface_cache/
