@@ -2,6 +2,8 @@
 # coding: utf-8
 
 # #### this is the main script for running pretrain scripts for BERT
+# 
+# Note that for corrupted and non-corrupted pretraining, the only difference is the training/validation data and nothing else! These scripts are directly adapted from
 
 # In[ ]:
 
@@ -167,7 +169,7 @@ class DataTrainingArguments:
 # In[ ]:
 
 
-def main(corrupted_vocab):
+def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -215,8 +217,15 @@ def main(corrupted_vocab):
     set_seed(training_args.seed)
 
     # load from pre-processed wikitext data files
-    if data_args.train_file is not None:
-        datasets = DatasetDict.load_from_disk(data_args.train_file)
+    if data_args.train_file is None:
+        raise ValueError("This code requires a training/validation file.")
+    if "corrupted" is in data_args.train_file:
+        print("****************************************")
+        print("*                                      *")
+        print("* you are working with corrupted BERT! *")
+        print("*                                      *")
+        print("****************************************")
+    datasets = DatasetDict.load_from_disk(data_args.train_file)
 
     # Load pretrained model and tokenizer
     #
@@ -237,13 +246,11 @@ def main(corrupted_vocab):
         logger.warning("You are instantiating a new config instance from scratch.")
 
     # this is our own tokenizer
-    if corrupted_vocab:
-        logger.warning("You are using a corrupted version of vocab!")
-        tokenizer = transformers.BertTokenizer(vocab_file="../data_files/bert_vocab_mismatch.txt", 
-                                               max_seq_length=data_args.max_seq_length)
-    else:
-        tokenizer = transformers.BertTokenizer(vocab_file="../data_files/bert_vocab.txt", 
-                                               max_seq_length=data_args.max_seq_length)
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model_type,
+        use_fast=False,
+        cache_dir=args.cache_dir
+    )
 
     if model_args.model_name_or_path:
         model = AutoModelForMaskedLM.from_pretrained(
@@ -412,21 +419,7 @@ def main(corrupted_vocab):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    ## this is for our own purpose
-    parser.add_argument("--bert_version",
-                        default="corrupted",
-                        type=str)
-    args = parser.parse_args()
-    corrupted_vocab = False
-    if args.bert_version == "corrupted":
-        print("****************************************")
-        print("*                                      *")
-        print("* you are working with corrupted BERT! *")
-        print("*                                      *")
-        print("****************************************")
-        corrupted_vocab = True
-    main(corrupted_vocab)
+    main()
 
 
 # In[ ]:

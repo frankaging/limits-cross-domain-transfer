@@ -1,3 +1,6 @@
+bert-base-uncased-wikitext-15M-results/
+code/runs/
+
 code/wandb/
 code/.ipynb_checkpoints/
 code/__pycache__/
