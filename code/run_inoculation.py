@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 from datasets import load_dataset, load_metric
 from datasets import Dataset
+from datasets import DatasetDict
 
 import transformers
 from transformers import (
@@ -65,13 +66,16 @@ def generate_training_args(args, inoculation_step):
     training_args.do_train = args.do_train
     training_args.do_eval = args.do_eval
     training_args.output_dir = os.path.join(args.output_dir, str(inoculation_step)+"-sample")
-    training_args.evaluation_strategy = EvaluationStrategy("epoch") # evaluation is done after each epoch
+    training_args.evaluation_strategy = args.evaluation_strategy # evaluation is done after each epoch
     training_args.metric_for_best_model = args.metric_for_best_model
     training_args.greater_is_better = args.greater_is_better
     training_args.logging_dir = args.logging_dir
     training_args.task_name = args.task_name
     training_args.learning_rate = args.learning_rate
-    training_args.num_train_epochs = 32 # this is the maximum num_train_epochs, we set this to be 100.
+    training_args.per_device_train_batch_size = args.per_device_train_batch_size
+    training_args.per_device_eval_batch_size = args.per_device_eval_batch_size
+    training_args.num_train_epochs = args.num_train_epochs # this is the maximum num_train_epochs, we set this to be 100.
+    training_args.eval_steps = args.eval_steps
     training_args.logging_steps = args.logging_steps
     training_args.load_best_model_at_end = args.load_best_model_at_end
     if args.save_total_limit != -1:
@@ -79,11 +83,10 @@ def generate_training_args(args, inoculation_step):
         training_args.save_total_limit = args.save_total_limit
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_{3}_mlen_{4}_lr_{5}_seed_{6}_metrics_{7}".format(
+    run_name = "{0}_{1}_{2}_mlen_{3}_lr_{4}_seed_{5}_metrics_{6}".format(
         args.run_name,
         args.model_type,
         date_time,
-        inoculation_step,
         args.max_seq_length,
         args.learning_rate,
         args.seed,
@@ -91,6 +94,10 @@ def generate_training_args(args, inoculation_step):
     )
     training_args.run_name = run_name
     training_args_dict = training_args.to_dict()
+    # for PR
+    _n_gpu = training_args_dict["_n_gpu"]
+    del training_args_dict["_n_gpu"]
+    training_args_dict["n_gpu"] = _n_gpu
     HfParser = HfArgumentParser((TrainingArguments))
     training_args = HfParser.parse_dict(training_args_dict)[0]
 
@@ -133,11 +140,16 @@ class HuggingFaceRoBERTaBase:
         self.model = model
         
     def train(self, inoculation_train_df, eval_df, model_path, training_args, max_length=128,
-              inoculation_patience_count=5):
+              inoculation_patience_count=5, pd_format=True):
 
-        datasets = {}
-        datasets["train"] = Dataset.from_pandas(inoculation_train_df)
-        datasets["validation"] = Dataset.from_pandas(eval_df)
+        if pd_format:
+            datasets = {}
+            datasets["train"] = Dataset.from_pandas(inoculation_train_df)
+            datasets["validation"] = Dataset.from_pandas(eval_df)
+        else:
+            datasets = {}
+            datasets["train"] = inoculation_train_df
+            datasets["validation"] = eval_df
         logger.info(f"***** Train Sample Count (Verify): %s *****"%(len(datasets["train"])))
         logger.info(f"***** Valid Sample Count (Verify): %s *****"%(len(datasets["validation"])))
     
@@ -190,7 +202,8 @@ class HuggingFaceRoBERTaBase:
             data_collator=default_data_collator
         )
         # Early stop
-        trainer.add_callback(EarlyStoppingCallback(inoculation_patience_count))
+        if inoculation_patience_count != -1:
+            trainer.add_callback(EarlyStoppingCallback(inoculation_patience_count))
         
         # Training
         if training_args.do_train:
@@ -232,11 +245,11 @@ if __name__ == "__main__":
                         default="inoculation-run",
                         type=str)
     parser.add_argument("--inoculation_data_path",
-                        default="../datasets/inoculation_round1/dynasent-v1-round01-yelp-train.tsv",
+                        default="../data-files/sst-tenary/sst-tenary-train.tsv",
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--eval_data_path",
-                        default="../datasets/round0/round0-dev.tsv",
+                        default="../data-files/sst-tenary/sst-tenary-dev.tsv",
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--model_path",
@@ -244,7 +257,7 @@ if __name__ == "__main__":
                         type=str,
                         help="The pretrained model binary file.")
     parser.add_argument("--model_type",
-                        default="roberta-base",
+                        default="bert-base-uncased",
                         type=str,
                         help="The pretrained model binary file.")
     parser.add_argument("--do_train",
@@ -259,6 +272,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether not to use CUDA when available")
+    parser.add_argument("--evaluation_strategy",
+                        default="steps",
+                        type=str,
+                        help="When you evaluate your training model on eval set.")
     parser.add_argument("--cache_dir",
                         default="../tmp/",
                         type=str,
@@ -301,6 +318,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether load best model and evaluate at the end.")
+    parser.add_argument("--eval_steps",
+                        default=10,
+                        type=float,
+                        help="The total steps to flush logs to wandb specifically.")
     parser.add_argument("--logging_steps",
                         default=10,
                         type=float,
@@ -315,23 +336,27 @@ if __name__ == "__main__":
                         type=int,
                         help="If the evaluation metrics is not increasing with maximum this step number, the training will be stopped.")
     parser.add_argument("--inoculation_step_sample_size",
-                        default=1000,
-                        type=int,
+                        default=0.05,
+                        type=float,
                         help="For each step, how many more adverserial samples you want to add in.")
-    parser.add_argument("--inoculation_step_count",
-                        default=10,
+    parser.add_argument("--per_device_train_batch_size",
+                        default=8,
                         type=int,
-                        help="The total number of inoculation step you want to have.")
-    parser.add_argument("--inoculation_step_count_init",
-                        default=0,
+                        help="")
+    parser.add_argument("--per_device_eval_batch_size",
+                        default=8,
                         type=int,
-                        help="The total number of inoculation step you want to have.")
+                        help="")
+    parser.add_argument("--num_train_epochs",
+                        default=3.0,
+                        type=float,
+                        help="The total number of epochs for training.")
     try:
         get_ipython().run_line_magic('matplotlib', 'inline')
         args = parser.parse_args([])
     except:
         args = parser.parse_args()
-    os.environ["WANDB_DISABLED"] = "false" if args.is_tensorboard else "true"
+    # os.environ["WANDB_DISABLED"] = "NO" if args.is_tensorboard else "YES" # BUG
     os.environ["TRANSFORMERS_CACHE"] = "../huggingface_inoculation_cache/"
     # if cache does not exist, create one
     if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
@@ -342,6 +367,7 @@ if __name__ == "__main__":
     # Load pretrained model and tokenizer
     NUM_LABELS = 3
     MAX_SEQ_LEN = 128
+    training_args = generate_training_args(args, inoculation_step=0)
     config = AutoConfig.from_pretrained(
         args.model_type,
         num_labels=3,
@@ -362,26 +388,34 @@ if __name__ == "__main__":
     train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
                                             model, args.task_name, 
                                             TASK_CONFIG[args.task_name])
-    training_args = generate_training_args(args, inoculation_step=0)
     # we use panda loader now, to make sure it is backward compatible
     # with our file writer.
-    train_df = pd.read_csv(args.inoculation_data_path , delimiter="\t")
-    eval_df = pd.read_csv(args.eval_data_path , delimiter="\t")
-    # This part is new for inoculations.
-    # We need to have a main loop for inoculations.
-    # TODO: adding automatic search
-    # for i in range(args.inoculation_step_count_init, args.inoculation_step_count):
-    # logger.info(f"***** Inoculation Step: %s *****"%(i+1))
-    
-    logger.info(f"***** Inoculation Sample Count: %s *****"%(args.inoculation_step_sample_size))
-    # this may not always start for zero inoculation
-    training_args = generate_training_args(args, inoculation_step=args.inoculation_step_sample_size)
-    inoculation_train_df = train_df.sample(n=args.inoculation_step_sample_size, 
-                                           replace=False, 
-                                           random_state=args.seed) # seed here could not a little annoying.
+    pd_format = True
+    if args.inoculation_data_path.split(".")[-1] != "tsv":
+        logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
+        pd_format = False
+        datasets = DatasetDict.load_from_disk(args.inoculation_data_path)
+        inoculation_step_sample_size = int(len(datasets["train"]) * args.inoculation_step_sample_size)
+        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
+        # this may not always start for zero inoculation
+        training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
+        datasets["train"] = datasets["train"].shuffle(seed=args.seed)
+        inoculation_train_df = datasets["train"].select(range(inoculation_step_sample_size))
+        eval_df = datasets["validation"]
+    else:
+        train_df = pd.read_csv(args.inoculation_data_path, delimiter="\t")
+        eval_df = pd.read_csv(args.eval_data_path, delimiter="\t")
+        inoculation_step_sample_size = int(len(train_df) * args.inoculation_step_sample_size)
+        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
+        # this may not always start for zero inoculation
+        training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
+        inoculation_train_df = train_df.sample(n=inoculation_step_sample_size, 
+                                               replace=False, 
+                                               random_state=args.seed) # seed here could not a little annoying.
+
 
     train_pipeline.train(inoculation_train_df, eval_df, 
                          args.model_path,
                          training_args, max_length=args.max_seq_length,
-                         inoculation_patience_count=args.inoculation_patience_count)
+                         inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format)
 

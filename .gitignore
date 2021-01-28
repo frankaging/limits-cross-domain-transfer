@@ -1,3 +1,5 @@
+data-files/
+saved-models/
 bert-base-uncased-wikitext-15M-results/
 code/runs/
 

@@ -44,8 +44,6 @@ def load_bert_vocab(vocab_file):
 def utf8len(s):
     return len(s.encode('utf-8'))
 
-vocab = load_bert_vocab(bert_vocab_path)
-
 def mismatch_vocab_random_by_categories(vocab):
     vocab_inverse = collections.OrderedDict()
     for k, v in vocab.items():
