@@ -351,6 +351,10 @@ if __name__ == "__main__":
                         default=3.0,
                         type=float,
                         help="The total number of epochs for training.")
+    parser.add_argument("--no_pretrain",
+                        default=False,
+                        action='store_true',
+                        help="Whether to use pretrained model if provided.")
     try:
         get_ipython().run_line_magic('matplotlib', 'inline')
         args = parser.parse_args([])
@@ -379,12 +383,16 @@ if __name__ == "__main__":
         use_fast=False,
         cache_dir=args.cache_dir
     )
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_path,
-        from_tf=False,
-        config=config,
-        cache_dir=args.cache_dir
-    )
+    if args.no_pretrain:
+        logger.info("***** Training new model from scratch *****")
+        model = AutoModelForSequenceClassification.from_config(config)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.model_path,
+            from_tf=False,
+            config=config,
+            cache_dir=args.cache_dir
+        )
     train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
                                             model, args.task_name, 
                                             TASK_CONFIG[args.task_name])
