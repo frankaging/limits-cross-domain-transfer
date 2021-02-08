@@ -355,6 +355,14 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether to use pretrained model if provided.")
+    parser.add_argument("--train_embeddings_only",
+                        default=False,
+                        action='store_true',
+                        help="If only train embeddings not the whole model.")
+    parser.add_argument("--train_linear_layer_only",
+                        default=False,
+                        action='store_true',
+                        help="If only train embeddings not the whole model.")
     try:
         get_ipython().run_line_magic('matplotlib', 'inline')
         args = parser.parse_args([])
@@ -393,6 +401,19 @@ if __name__ == "__main__":
             config=config,
             cache_dir=args.cache_dir
         )
+        
+    if args.train_embeddings_only:
+        logger.info("***** We only train embeddings, not other layers *****")
+        for name, param in model.named_parameters():
+            if 'word_embeddings' not in name: # only word embeddings
+                param.requires_grad = False
+    
+    if args.train_linear_layer_only:
+        logger.info("***** We only train classifier head, not other layers *****")
+        for name, param in model.named_parameters():
+            if 'classifier' not in name: # only word embeddings
+                param.requires_grad = False
+        
     train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
                                             model, args.task_name, 
                                             TASK_CONFIG[args.task_name])
