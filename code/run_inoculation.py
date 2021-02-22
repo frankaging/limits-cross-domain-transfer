@@ -390,10 +390,12 @@ if __name__ == "__main__":
         "cola": ("sentence", None),
         "mnli": ("premise", "hypothesis"),
         "snli": ("premise", "hypothesis"),
+        "mrpc": ("sentence1", "sentence2"),
+        "qnli": ("question", "sentence")
     }
     # Load pretrained model and tokenizer
-    NUM_LABELS = 2 if args.task_name == "cola" else 3
-    MAX_SEQ_LEN = 128
+    NUM_LABELS = 2 if args.task_name == "cola" or args.task_name == "mrpc" or args.task_name == "qnli" else 3
+    MAX_SEQ_LEN = args.max_seq_length
     training_args = generate_training_args(args, inoculation_step=0)
     config = AutoConfig.from_pretrained(
         args.model_type,
@@ -454,7 +456,7 @@ if __name__ == "__main__":
         else:
             logger.info(f"***** Loading downloaded huggingface datasets: {args.inoculation_data_path}! *****")
             pd_format = False
-            if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli"]:
+            if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli", "mrps", "qnli"]:
                 pass
             raise NotImplementedError()
     else:
