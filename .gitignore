@@ -1,3 +1,4 @@
+*-results/
 finetune-bert-random-results/
 data-files/
 saved-models/

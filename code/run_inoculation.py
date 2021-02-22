@@ -18,7 +18,7 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report
+from sklearn.metrics import matthews_corrcoef
 
 import logging
 logger = logging.getLogger(__name__)
@@ -83,8 +83,9 @@ def generate_training_args(args, inoculation_step):
         training_args.save_total_limit = args.save_total_limit
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_mlen_{3}_lr_{4}_seed_{5}_metrics_{6}".format(
+    run_name = "{0}_{1}_{2}_{3}_mlen_{4}_lr_{5}_seed_{6}_metrics_{7}".format(
         args.run_name,
+        args.task_name,
         args.model_type,
         date_time,
         args.max_seq_length,
@@ -186,8 +187,11 @@ class HuggingFaceRoBERTaBase:
             preds = np.argmax(preds, axis=1)
             result_to_print = classification_report(p.label_ids, preds, digits=5, output_dict=True)
             print(classification_report(p.label_ids, preds, digits=5))
+            mcc_scores = matthews_corrcoef(p.label_ids, preds)
+            logger.info(f"MCC scores: {mcc_scores}.")
             result_to_return = metric.compute(predictions=preds, references=p.label_ids)
             result_to_return["Macro-F1"] = result_to_print["macro avg"]["f1-score"]
+            result_to_return["MCC"] = mcc_scores
             return result_to_return
 
         # Initialize our Trainer. We are only intersted in evaluations
@@ -238,8 +242,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     ## Required parameters
+    parser.add_argument("--wandb_proj_name",
+                        default="",
+                        type=str)
     parser.add_argument("--task_name",
-                        default="inoculation",
+                        default="sst3",
                         type=str)
     parser.add_argument("--run_name",
                         default="inoculation-run",
@@ -347,6 +354,10 @@ if __name__ == "__main__":
                         default=8,
                         type=int,
                         help="")
+    parser.add_argument("--eval_sample_limit",
+                        default=-1,
+                        type=int,
+                        help="")
     parser.add_argument("--num_train_epochs",
                         default=3.0,
                         type=float,
@@ -370,19 +381,23 @@ if __name__ == "__main__":
         args = parser.parse_args()
     # os.environ["WANDB_DISABLED"] = "NO" if args.is_tensorboard else "YES" # BUG
     os.environ["TRANSFORMERS_CACHE"] = "../huggingface_inoculation_cache/"
+    os.environ["WANDB_PROJECT"] = f"{args.task_name}_bert_corrupt"
     # if cache does not exist, create one
     if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
         os.makedirs(os.environ["TRANSFORMERS_CACHE"])
     TASK_CONFIG = {
-        "inoculation": ("text", None)
+        "sst3": ("text", None),
+        "cola": ("sentence", None),
+        "mnli": ("premise", "hypothesis"),
+        "snli": ("premise", "hypothesis"),
     }
     # Load pretrained model and tokenizer
-    NUM_LABELS = 3
+    NUM_LABELS = 2 if args.task_name == "cola" else 3
     MAX_SEQ_LEN = 128
     training_args = generate_training_args(args, inoculation_step=0)
     config = AutoConfig.from_pretrained(
         args.model_type,
-        num_labels=3,
+        num_labels=NUM_LABELS,
         finetuning_task=args.task_name,
         cache_dir=args.cache_dir
     )
@@ -417,20 +432,31 @@ if __name__ == "__main__":
     train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
                                             model, args.task_name, 
                                             TASK_CONFIG[args.task_name])
+    logger.info(f"***** TASK NAME: {args.task_name} *****")
     # we use panda loader now, to make sure it is backward compatible
     # with our file writer.
     pd_format = True
     if args.inoculation_data_path.split(".")[-1] != "tsv":
-        logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
-        pd_format = False
-        datasets = DatasetDict.load_from_disk(args.inoculation_data_path)
-        inoculation_step_sample_size = int(len(datasets["train"]) * args.inoculation_step_sample_size)
-        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
-        # this may not always start for zero inoculation
-        training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
-        datasets["train"] = datasets["train"].shuffle(seed=args.seed)
-        inoculation_train_df = datasets["train"].select(range(inoculation_step_sample_size))
-        eval_df = datasets["validation"]
+        if len(args.inoculation_data_path.split(".")) > 1:
+            logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
+            pd_format = False
+            datasets = DatasetDict.load_from_disk(args.inoculation_data_path)
+            inoculation_step_sample_size = int(len(datasets["train"]) * args.inoculation_step_sample_size)
+            logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
+            # this may not always start for zero inoculation
+            training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
+            datasets["train"] = datasets["train"].shuffle(seed=args.seed)
+            inoculation_train_df = datasets["train"].select(range(inoculation_step_sample_size))
+            eval_df = datasets["validation"]
+            datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
+            if args.eval_sample_limit != -1:
+                datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
+        else:
+            logger.info(f"***** Loading downloaded huggingface datasets: {args.inoculation_data_path}! *****")
+            pd_format = False
+            if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli"]:
+                pass
+            raise NotImplementedError()
     else:
         train_df = pd.read_csv(args.inoculation_data_path, delimiter="\t")
         eval_df = pd.read_csv(args.eval_data_path, delimiter="\t")
