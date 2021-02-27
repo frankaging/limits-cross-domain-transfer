@@ -335,7 +335,7 @@ if __name__ == "__main__":
                         help="The total steps to flush logs to wandb specifically.")
     parser.add_argument("--save_total_limit",
                         default=-1,
-                        type=float,
+                        type=int,
                         help="If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in output dir.")
     # these are arguments for inoculations
     parser.add_argument("--inoculation_patience_count",
