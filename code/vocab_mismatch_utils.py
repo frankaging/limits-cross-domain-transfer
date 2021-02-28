@@ -34,18 +34,6 @@ lemmatizer = WordNetLemmatizer()
 from word_forms.word_forms import get_word_forms
 
 
-def token_length_mapping(example):
-    original_sentence = example['text']
-    tokens, token_dict = modified_tokenizer.tokenize(original_sentence)
-    for token, pieces in token_dict.items():
-        _len = len(pieces)
-        if _len in token_by_length.keys():
-            if token not in token_by_length[_len]:
-                token_by_length[_len].append(token)
-        else:
-            token_by_length[_len] = [token]
-    return example
-
 def rotate(list_in, k):
     list_out = copy.deepcopy(list_in)
     # speed up the rotation
@@ -57,7 +45,7 @@ def rotate(list_in, k):
             list_out[j], previous = previous, list_out[j]
     return list_out
 
-def generate_vocab_match(token_by_length):
+def generate_vocab_match_v1(token_by_length):
     vocab_match = {}
     for _, tokens in token_by_length.items():
         tokens_copy = copy.deepcopy(tokens)
@@ -80,16 +68,6 @@ def token_lemma_mapping(word_dict):
             all_lemmas = all_lemmas.union(e_v)
         token_lemma_map[k] = all_lemmas
     return token_lemma_map
-
-def token_frequency_mapping(example):
-    original_sentence = example['text']
-    tokens, token_dict = modified_tokenizer.tokenize(original_sentence)
-    for token, pieces in token_dict.items():
-        if token in token_frequency_map.keys():
-            token_frequency_map[token] = token_frequency_map[token] + 1
-        else:
-            token_frequency_map[token] = 1
-    return example
 
 def levenshteinDistance(s1, s2):
     if len(s1) > len(s2):
@@ -193,7 +171,7 @@ def match_by_lemma_and_edit_dist(tokens, token_lemma_map):
     
     return vocab_match
 
-def generate_vocab_match(token_by_length, token_frequency_map, token_lemma_map):
+def generate_vocab_match_v2(token_by_length, token_frequency_map, token_lemma_map):
     vocab_match = {}
     for length, tokens in token_by_length.items():
         print(f"examining length = {length}, candidates length = {len(tokens)}")
