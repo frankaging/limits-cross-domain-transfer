@@ -54,6 +54,10 @@ from transformers import (
     EarlyStoppingCallback
 )
 from transformers.trainer_utils import is_main_process, EvaluationStrategy
+from functools import partial
+
+from vocab_mismatch_utils import *
+basic_tokenizer = ModifiedBasicTokenizer()
 
 
 # In[2]:
@@ -158,31 +162,67 @@ class HuggingFaceRoBERTaBase:
         label_list = datasets["validation"].unique("label")
         label_list.sort()  # Let's sort it for determinism
 
+        sentence1_key, sentence2_key = self.task_config
+        
         # we will scramble out input sentence here
         # TODO: we scramble both train and eval sets
-        def scramble_inputs(proportion, example):
-            original_text = example['text']
-            original_sentence = basic_tokenizer.tokenize(original_text)
-            max_length = len(original_sentence)
-            scramble_length = int(max_length*proportion)
-            scramble_start = random.randint(0, len(original_sentence)-scramble_length)
-            scramble_end = scramble_start + scramble_length
-            scramble_sentence = original_sentence[scramble_start:scramble_end]
-            random.shuffle(scramble_sentence)
-            scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
+        if self.task_name == "sst3" or self.task_name == "cola":
+            def scramble_inputs(proportion, example):
+                original_text = example[sentence1_key]
+                original_sentence = basic_tokenizer.tokenize(original_text)
+                max_length = len(original_sentence)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, len(original_sentence)-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_sentence[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
 
-            out_string = " ".join(scramble_text).replace(" ##", "").strip()
-            example['text'] = out_string
-            return example
+                out_string = " ".join(scramble_text).replace(" ##", "").strip()
+                example[sentence1_key] = out_string
+                return example
+        elif self.task_name == "snli" or             self.task_name == "mrpc" or             self.task_name == "qnli":
+            def scramble_inputs(proportion, example):
+                original_premise = example[sentence1_key]
+                original_hypothesis = example[sentence2_key]
+                if original_hypothesis == None:
+                    original_hypothesis = ""
+                try:
+                    original_premise_tokens = basic_tokenizer.tokenize(original_premise)
+                    original_hypothesis_tokens = basic_tokenizer.tokenize(original_hypothesis)
+                except:
+                    print("Please debug these sequence...")
+                    print(original_premise)
+                    print(original_hypothesis)
+
+                max_length = len(original_premise_tokens)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, max_length-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_premise_tokens[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text_premise = original_premise_tokens[:scramble_start] + scramble_sentence + original_premise_tokens[scramble_end:]
+
+                max_length = len(original_hypothesis_tokens)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, max_length-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_hypothesis_tokens[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text_hypothesis = original_hypothesis_tokens[:scramble_start] + scramble_sentence + original_hypothesis_tokens[scramble_end:]
+
+                out_string_premise = " ".join(scramble_text_premise).replace(" ##", "").strip()
+                out_string_hypothesis = " ".join(scramble_text_hypothesis).replace(" ##", "").strip()
+                example[sentence1_key] = out_string_premise
+                example[sentence2_key] = out_string_hypothesis
+                return example
         
         if scramble_proportion > 0.0:
             logger.info(f"You are scrambling the inputs to test syntactic feature importance!")
-            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion), 
-                                                      batched=True)
+            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion))
             if eval_with_scramble:
                 logger.info(f"You are scrambling the evaluation data as well!")
-                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion), 
-                                                                    batched=True)
+                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion))
         
         padding = "max_length"
         sentence1_key, sentence2_key = self.task_config
