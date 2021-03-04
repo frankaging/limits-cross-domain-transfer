@@ -141,7 +141,8 @@ class HuggingFaceRoBERTaBase:
         self.model = model
         
     def train(self, inoculation_train_df, eval_df, model_path, training_args, max_length=128,
-              inoculation_patience_count=5, pd_format=True):
+              inoculation_patience_count=5, pd_format=True, 
+              scramble_proportion=0.0, eval_with_scramble=False):
 
         if pd_format:
             datasets = {}
@@ -156,6 +157,32 @@ class HuggingFaceRoBERTaBase:
     
         label_list = datasets["validation"].unique("label")
         label_list.sort()  # Let's sort it for determinism
+
+        # we will scramble out input sentence here
+        # TODO: we scramble both train and eval sets
+        def scramble_inputs(proportion, example):
+            original_text = example['text']
+            original_sentence = basic_tokenizer.tokenize(original_text)
+            max_length = len(original_sentence)
+            scramble_length = int(max_length*proportion)
+            scramble_start = random.randint(0, len(original_sentence)-scramble_length)
+            scramble_end = scramble_start + scramble_length
+            scramble_sentence = original_sentence[scramble_start:scramble_end]
+            random.shuffle(scramble_sentence)
+            scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
+
+            out_string = " ".join(scramble_text).replace(" ##", "").strip()
+            example['text'] = out_string
+            return example
+        
+        if scramble_proportion > 0.0:
+            logger.info(f"You are scrambling the inputs to test syntactic feature importance!")
+            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion), 
+                                                      batched=True)
+            if eval_with_scramble:
+                logger.info(f"You are scrambling the evaluation data as well!")
+                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion), 
+                                                                    batched=True)
         
         padding = "max_length"
         sentence1_key, sentence2_key = self.task_config
@@ -374,6 +401,16 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="If only train embeddings not the whole model.")
+    # these are arguments for scrambling texts
+    parser.add_argument("--scramble_proportion",
+                        default=0.0,
+                        type=float,
+                        help="What is the percentage of text you want to scramble.")
+    parser.add_argument("--eval_with_scramble",
+                        default=False,
+                        action='store_true',
+                        help="If you are also evaluating with scrambled texts.")
+
     try:
         get_ipython().run_line_magic('matplotlib', 'inline')
         args = parser.parse_args([])
@@ -474,5 +511,6 @@ if __name__ == "__main__":
     train_pipeline.train(inoculation_train_df, eval_df, 
                          args.model_path,
                          training_args, max_length=args.max_seq_length,
-                         inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format)
+                         inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
+                         scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
 
