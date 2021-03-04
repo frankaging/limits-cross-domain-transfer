@@ -13,13 +13,13 @@ POS = "1"
 NEUTRAL = "2"
 
 
-def write_tsv(*datasets, output_filename):
+def write_tsv(*datasets, output_filename, fieldnames=['text', 'label', 'source']):
     all_data = []
     for dataset in datasets:
         all_data += dataset
     random.shuffle(all_data)
     with open(output_filename, "wt") as f:
-        writer = csv.DictWriter(f, delimiter="\t", fieldnames=['text', 'label', 'source'])
+        writer = csv.DictWriter(f, delimiter="\t", fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(all_data)
 

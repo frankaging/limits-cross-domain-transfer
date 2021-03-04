@@ -381,7 +381,7 @@ if __name__ == "__main__":
         args = parser.parse_args()
     # os.environ["WANDB_DISABLED"] = "NO" if args.is_tensorboard else "YES" # BUG
     os.environ["TRANSFORMERS_CACHE"] = "../huggingface_inoculation_cache/"
-    os.environ["WANDB_PROJECT"] = f"{args.task_name}_bert_corrupt"
+    os.environ["WANDB_PROJECT"] = f"{args.task_name}_bertonomy"
     # if cache does not exist, create one
     if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
         os.makedirs(os.environ["TRANSFORMERS_CACHE"])

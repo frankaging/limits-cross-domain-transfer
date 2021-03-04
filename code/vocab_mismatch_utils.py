@@ -54,20 +54,10 @@ def generate_vocab_match_v1(token_by_length):
             rotate_degree = random.randint(1, len(tokens_copy)-1)
         else:
             rotate_degree = 0
-        tokens_copy = rotate(tokens_copy, rotate_degree)
+        rotated_tokens = rotate(tokens_copy, rotate_degree)
         for i in range(len(tokens)):
-            vocab_match[tokens[i]] = tokens_copy[i]
+            vocab_match[tokens_copy[i]] = rotated_tokens[i]
     return vocab_match
-
-def token_lemma_mapping(word_dict):
-    token_lemma_map = {}
-    for k, v in word_dict.items():
-        external_forms = get_word_forms(k)
-        all_lemmas = set([])
-        for e_k, e_v in external_forms.items():
-            all_lemmas = all_lemmas.union(e_v)
-        token_lemma_map[k] = all_lemmas
-    return token_lemma_map
 
 def levenshteinDistance(s1, s2):
     if len(s1) > len(s2):
@@ -183,6 +173,67 @@ def generate_vocab_match_v2(token_by_length, token_frequency_map, token_lemma_ma
             sub_vocab_match = match_by_lemma_and_edit_dist(tokens, token_lemma_map)
             for k, v in sub_vocab_match.items():
                 vocab_match[k] = v
+    return vocab_match
+
+def generate_vocab_match_v1_mutual(token_by_length):
+    vocab_match = {}
+    for _, tokens in token_by_length.items():
+        tokens_copy = copy.deepcopy(tokens)
+        
+        if len(tokens_copy) % 2 == 0:
+            mid_len = int(len(tokens_copy)/2)
+            first_half = tokens_copy[:mid_len]
+            second_half = tokens_copy[mid_len:]
+            random.shuffle(first_half)
+            random.shuffle(second_half)
+            for i in range(len(first_half)):
+                vocab_match[first_half[i]] = second_half[i]
+                vocab_match[second_half[i]] = first_half[i]
+        else:
+            extra_token = tokens_copy[-1]
+            tokens_copy_shorten = tokens_copy[:-1]
+            mid_len = int(len(tokens_copy)/2)
+            first_half = tokens_copy_shorten[:mid_len]
+            second_half = tokens_copy_shorten[mid_len:]
+            random.shuffle(first_half)
+            random.shuffle(second_half)
+            for i in range(len(first_half)):
+                vocab_match[first_half[i]] = second_half[i]
+                vocab_match[second_half[i]] = first_half[i]
+            vocab_match[extra_token] = extra_token
+    return vocab_match
+
+def generate_vocab_match_v2_mutual(token_by_length, token_frequency_map, token_lemma_map):
+    """
+    TODO: fix bugs
+    """
+    vocab_match = {}
+    for _, tokens in token_by_length.items():
+        tokens_copy = copy.deepcopy(tokens)
+        
+        # token_frequency_map, token_lemma_map)
+        
+        token_freq_tu = []
+        for t in tokens:
+            token_freq_tu.append((t, token_frequency_map[t]))
+        token_freq_tu = sorted(token_freq_tu, key=operator.itemgetter(1), reverse=True)
+        
+        matched_to = set([])
+        for i in trange(0, len(token_freq_tu)):
+            found = False
+            for j in range(0, len(token_freq_tu)):
+                word_i = token_freq_tu[i][0]
+                word_j = token_freq_tu[j][0]
+                if i != j and word_j not in matched_to and \
+                    len(token_lemma_map[word_i].intersection(token_lemma_map[word_j])) == 0 and \
+                    levenshteinDistance(word_i, word_j) > 0.3:
+                    matched_to.add(word_j)
+                    vocab_match[word_i] = word_j
+                    found = True
+                    break
+            if not found:
+                vocab_match[word_i] = word_i
+            
     return vocab_match
 
 def convert_to_unicode(text):
