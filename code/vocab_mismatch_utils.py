@@ -578,6 +578,7 @@ class ModifiedBertTokenizer(PreTrainedTokenizer):
                     token_dict[token] = self.wordpiece_tokenizer.tokenize(token)
         else:
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
+            
         return split_tokens, token_dict
 
     def _convert_token_to_id(self, token):
