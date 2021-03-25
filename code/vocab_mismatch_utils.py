@@ -31,6 +31,46 @@ lemmatizer = WordNetLemmatizer()
 from word_forms.word_forms import get_word_forms
 
 
+# translator to try it out!
+def corrupt_translator(in_string, tokenizer, vocab_match):
+    tokens = tokenizer.tokenize(in_string)
+    translate_tokens = [vocab_match[t] for t in tokens]
+    out_string = " ".join(translate_tokens).replace(" ##", "").strip()
+    return out_string
+
+def plot_dist(vocab, map1, map2):
+    freq_diff = []
+    for k, v in vocab.items():
+        diff = abs(map1[k] - map2[v])
+        # print(diff)
+        freq_diff.append(diff)
+    fig = plt.figure(figsize=(8,6))
+    ax = fig.add_subplot(111)
+    g = ax.hist(freq_diff, bins=100, facecolor='r')
+    plt.grid(True)
+    plt.grid(color='black', linestyle='-.')
+    import matplotlib.ticker as mtick
+    ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.2e'))
+    ax.set_yscale('log')
+    plt.tight_layout()
+    plt.show()
+    
+def random_corrupt(tokenizer, vocab_match, example):
+    original_sentence = example['text']
+    corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+    example['text'] = corrupted_sentence
+    return example
+
+def token_lemma_mapping(word_dict):
+    token_lemma_map = {}
+    for k, v in word_dict.items():
+        external_forms = get_word_forms(k)
+        all_lemmas = set([])
+        for e_k, e_v in external_forms.items():
+            all_lemmas = all_lemmas.union(e_v)
+        token_lemma_map[k] = all_lemmas
+    return token_lemma_map
+
 def rotate(list_in, k):
     list_out = copy.deepcopy(list_in)
     # speed up the rotation

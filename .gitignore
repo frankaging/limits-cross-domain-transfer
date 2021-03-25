@@ -1,3 +1,5 @@
+*-matched/
+*-mismatched/
 *-S*/
 *-results/
 finetune-bert-random-results/
