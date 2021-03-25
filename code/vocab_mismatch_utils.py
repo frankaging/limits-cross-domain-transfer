@@ -54,12 +54,6 @@ def plot_dist(vocab, map1, map2):
     ax.set_yscale('log')
     plt.tight_layout()
     plt.show()
-    
-def random_corrupt(tokenizer, vocab_match, example):
-    original_sentence = example['text']
-    corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
-    example['text'] = corrupted_sentence
-    return example
 
 def token_lemma_mapping(word_dict):
     token_lemma_map = {}
