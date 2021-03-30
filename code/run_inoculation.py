@@ -58,6 +58,7 @@ from functools import partial
 
 from vocab_mismatch_utils import *
 basic_tokenizer = ModifiedBasicTokenizer()
+from models.modeling_bert import CustomerizedBertForSequenceClassification
 
 
 # In[2]:
@@ -450,7 +451,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="If you are also evaluating with scrambled texts.")
-
+    parser.add_argument("--n_layer_to_finetune",
+                        default=-1,
+                        type=int,
+                        help="Indicate a number that is less than original layer if you only want to finetune with earlier layers only.")
     try:
         get_ipython().run_line_magic('matplotlib', 'inline')
         args = parser.parse_args([])
@@ -480,6 +484,19 @@ if __name__ == "__main__":
         finetuning_task=args.task_name,
         cache_dir=args.cache_dir
     )
+    if args.n_layer_to_finetune != -1:
+        # then we are only finetuning n-th layer, not all the layers
+        if args.n_layer_to_finetune > config.num_hidden_layers:
+            logger.info(f"***** WARNING: You are trying to train with first {args.n_layer_to_finetune} layers only *****")
+            logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
+            logger.info(f"***** WARNING: Training with all layers instead! *****")
+            pass # just to let it happen, just train it with all layers
+        else:
+            # overwrite
+            logger.info(f"***** WARNING: You are trying to train with first {args.n_layer_to_finetune} layers only *****")
+            logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
+            config.num_hidden_layers = args.n_layer_to_finetune
+    
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_type,
         use_fast=False,
