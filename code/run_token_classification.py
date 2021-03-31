@@ -36,6 +36,7 @@ import pandas as pd
 from datasets import load_dataset, load_metric
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import ClassLabel
 
 import transformers
 from transformers import (
@@ -50,7 +51,9 @@ from transformers import (
     TrainingArguments,
     default_data_collator,
     set_seed,
-    EarlyStoppingCallback
+    EarlyStoppingCallback,
+    DataCollatorForTokenClassification,
+    PreTrainedTokenizerFast
 )
 from transformers.trainer_utils import is_main_process, EvaluationStrategy
 from functools import partial
@@ -60,7 +63,7 @@ basic_tokenizer = ModifiedBasicTokenizer()
 from models.modeling_bert import CustomerizedBertForSequenceClassification
 
 
-# In[2]:
+# In[ ]:
 
 
 def generate_training_args(args, inoculation_step):
@@ -133,173 +136,6 @@ def generate_training_args(args, inoculation_step):
         transformers.utils.logging.enable_explicit_format()
     logger.info(f"Training/evaluation parameters {training_args}")
     return training_args
-
-class HuggingFaceRoBERTaBase:
-    """
-    An extension for evaluation based off the huggingface module.
-    """
-    def __init__(self, tokenizer, model, task_name, task_config):
-        self.task_name = task_name
-        self.task_config = task_config
-        self.tokenizer = tokenizer
-        self.model = model
-        
-    def train(self, inoculation_train_df, eval_df, model_path, training_args, max_length=128,
-              inoculation_patience_count=5, pd_format=True, 
-              scramble_proportion=0.0, eval_with_scramble=False):
-
-        if pd_format:
-            datasets = {}
-            datasets["train"] = Dataset.from_pandas(inoculation_train_df)
-            datasets["validation"] = Dataset.from_pandas(eval_df)
-        else:
-            datasets = {}
-            datasets["train"] = inoculation_train_df
-            datasets["validation"] = eval_df
-        logger.info(f"***** Train Sample Count (Verify): %s *****"%(len(datasets["train"])))
-        logger.info(f"***** Valid Sample Count (Verify): %s *****"%(len(datasets["validation"])))
-    
-        label_list = datasets["validation"].unique("label")
-        label_list.sort()  # Let's sort it for determinism
-
-        sentence1_key, sentence2_key = self.task_config
-        
-        # we will scramble out input sentence here
-        # TODO: we scramble both train and eval sets
-        if self.task_name == "sst3" or self.task_name == "cola":
-            def scramble_inputs(proportion, example):
-                original_text = example[sentence1_key]
-                original_sentence = basic_tokenizer.tokenize(original_text)
-                max_length = len(original_sentence)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, len(original_sentence)-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_sentence[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
-
-                out_string = " ".join(scramble_text).replace(" ##", "").strip()
-                example[sentence1_key] = out_string
-                return example
-        elif self.task_name == "snli" or             self.task_name == "mrpc" or             self.task_name == "qnli":
-            def scramble_inputs(proportion, example):
-                original_premise = example[sentence1_key]
-                original_hypothesis = example[sentence2_key]
-                if original_hypothesis == None:
-                    original_hypothesis = ""
-                try:
-                    original_premise_tokens = basic_tokenizer.tokenize(original_premise)
-                    original_hypothesis_tokens = basic_tokenizer.tokenize(original_hypothesis)
-                except:
-                    print("Please debug these sequence...")
-                    print(original_premise)
-                    print(original_hypothesis)
-
-                max_length = len(original_premise_tokens)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, max_length-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_premise_tokens[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text_premise = original_premise_tokens[:scramble_start] + scramble_sentence + original_premise_tokens[scramble_end:]
-
-                max_length = len(original_hypothesis_tokens)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, max_length-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_hypothesis_tokens[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text_hypothesis = original_hypothesis_tokens[:scramble_start] + scramble_sentence + original_hypothesis_tokens[scramble_end:]
-
-                out_string_premise = " ".join(scramble_text_premise).replace(" ##", "").strip()
-                out_string_hypothesis = " ".join(scramble_text_hypothesis).replace(" ##", "").strip()
-                example[sentence1_key] = out_string_premise
-                example[sentence2_key] = out_string_hypothesis
-                return example
-        
-        if scramble_proportion > 0.0:
-            logger.info(f"You are scrambling the inputs to test syntactic feature importance!")
-            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion))
-            if eval_with_scramble:
-                logger.info(f"You are scrambling the evaluation data as well!")
-                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion))
-        
-        padding = "max_length"
-        sentence1_key, sentence2_key = self.task_config
-        label_to_id = None
-        def preprocess_function(examples):
-            # Tokenize the texts
-            args = (
-                (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
-            )
-            result = self.tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
-            # Map labels to IDs (not necessary for GLUE tasks)
-            if label_to_id is not None and "label" in examples:
-                result["label"] = [label_to_id[l] for l in examples["label"]]
-            return result
-        datasets["train"] = datasets["train"].map(preprocess_function, batched=True)
-        datasets["validation"] = datasets["validation"].map(preprocess_function, batched=True)
-        
-        train_dataset = datasets["train"]
-        eval_dataset = datasets["validation"]
-        
-        # Log a few random samples from the training set:
-        for index in random.sample(range(len(train_dataset)), 3):
-            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
-            
-        metric = load_metric("glue", "sst2") # any glue task will do the job, just for eval loss
-        
-        def asenti_compute_metrics(p: EvalPrediction):
-            preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
-            preds = np.argmax(preds, axis=1)
-            result_to_print = classification_report(p.label_ids, preds, digits=5, output_dict=True)
-            print(classification_report(p.label_ids, preds, digits=5))
-            mcc_scores = matthews_corrcoef(p.label_ids, preds)
-            logger.info(f"MCC scores: {mcc_scores}.")
-            result_to_return = metric.compute(predictions=preds, references=p.label_ids)
-            result_to_return["Macro-F1"] = result_to_print["macro avg"]["f1-score"]
-            result_to_return["MCC"] = mcc_scores
-            return result_to_return
-
-        # Initialize our Trainer. We are only intersted in evaluations
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            compute_metrics=asenti_compute_metrics,
-            tokenizer=self.tokenizer,
-            # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
-            data_collator=default_data_collator
-        )
-        # Early stop
-        if inoculation_patience_count != -1:
-            trainer.add_callback(EarlyStoppingCallback(inoculation_patience_count))
-        
-        # Training
-        if training_args.do_train:
-            logger.info("*** Training our model ***")
-            trainer.train(
-                model_path=model_path
-            )
-            trainer.save_model()  # Saves the tokenizer too for easy upload
-        
-        # Evaluation
-        eval_results = {}
-        if training_args.do_eval:
-            logger.info("*** Evaluate ***")
-            tasks = [self.task_name]
-            eval_datasets = [eval_dataset]
-            for eval_dataset, task in zip(eval_datasets, tasks):
-                eval_result = trainer.evaluate(eval_dataset=eval_dataset)
-                output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task}.txt")
-                if trainer.is_world_process_zero():
-                    with open(output_eval_file, "w") as writer:
-                        logger.info(f"***** Eval results {task} *****")
-                        for key, value in eval_result.items():
-                            logger.info(f"  {key} = {value}")
-                            writer.write(f"{key} = {value}\n")
-                eval_results.update(eval_result)
 
 
 # In[ ]:
@@ -395,6 +231,11 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether load best model and evaluate at the end.")
+    parser.add_argument("--label_all_tokens",
+                        default=False,
+                        action='store_true',
+                        help="Whether to put the label for one word on all tokens of generated by that word or just on the "
+                             "one (in which case the other tokens will have a padding index).")
     parser.add_argument("--eval_steps",
                         default=10,
                         type=float,
@@ -421,6 +262,10 @@ if __name__ == "__main__":
                         type=int,
                         help="")
     parser.add_argument("--per_device_eval_batch_size",
+                        default=8,
+                        type=int,
+                        help="")
+    parser.add_argument("--preprocessing_num_workers",
                         default=8,
                         type=int,
                         help="")
@@ -453,6 +298,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="If you are also evaluating with scrambled texts.")
+    parser.add_argument("--overwrite_cache",
+                        default=False,
+                        action='store_true',
+                        help="Overwrite the cached training and evaluation sets.")
     parser.add_argument("--n_layer_to_finetune",
                         default=-1,
                         type=int,
@@ -478,7 +327,7 @@ if __name__ == "__main__":
     if args.inoculation_data_path.split(".")[-1] != "tsv":
         # here, we download from the huggingface server probably!
         dataset = load_dataset(args.inoculation_data_path)
-        train_df = dataset["trian"]
+        inoculation_train_df = dataset["train"]
         eval_df = dataset["validation"]
     else:
         train_df = pd.read_csv(args.inoculation_data_path, delimiter="\t")
@@ -493,6 +342,7 @@ if __name__ == "__main__":
     
     text_column_name = TASK_CONFIG[args.task_name][0]
     label_column_name = args.token_type
+    features = inoculation_train_df.features
     
     def get_label_list(labels):
         unique_labels = set()
@@ -507,7 +357,7 @@ if __name__ == "__main__":
         # No need to convert the labels since they are already ints.
         label_to_id = {i: i for i in range(len(label_list))}
     else:
-        label_list = get_label_list(train_df[label_column_name])
+        label_list = get_label_list(inoculation_train_df[label_column_name])
         label_to_id = {l: i for i, l in enumerate(label_list)}
     num_labels = len(label_list)
     
@@ -516,7 +366,7 @@ if __name__ == "__main__":
     training_args = generate_training_args(args, inoculation_step=0)
     config = AutoConfig.from_pretrained(
         args.model_type,
-        num_labels=NUM_LABELS,
+        num_labels=num_labels,
         finetuning_task=args.task_name,
         cache_dir=args.cache_dir
     )
@@ -535,9 +385,17 @@ if __name__ == "__main__":
     
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_type,
-        use_fast=False,
+        use_fast=True,
         cache_dir=args.cache_dir
     )
+    # Tokenizer check: this script requires a fast tokenizer.
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise ValueError(
+            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
+            "at https://huggingface.co/transformers/index.html#bigtable to find the model types that meet this "
+            "requirement"
+        )
+    
     if args.no_pretrain:
         logger.info("***** Training new model from scratch *****")
         model = AutoModelForTokenClassification.from_config(config)
@@ -561,17 +419,144 @@ if __name__ == "__main__":
             if 'classifier' not in name: # only word embeddings
                 param.requires_grad = False
         
-    train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
-                                            model, args.task_name, 
-                                            TASK_CONFIG[args.task_name])
     logger.info(f"***** TASK NAME: {args.task_name} *****")
+    datasets = {}
+    datasets["train"] = inoculation_train_df
+    datasets["validation"] = eval_df
+    logger.info(f"***** Train Sample Count (Verify): %s *****"%(len(datasets["train"])))
+    logger.info(f"***** Valid Sample Count (Verify): %s *****"%(len(datasets["validation"])))
+    
+    padding = "max_length"
+    
+    # Tokenize all texts and align the labels with them.
+    def tokenize_and_align_labels(examples):
+        tokenized_inputs = tokenizer(
+            examples[text_column_name],
+            padding=padding,
+            truncation=True,
+            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+            is_split_into_words=True,
+        )
+        labels = []
+        for i, label in enumerate(examples[label_column_name]):
+            word_ids = tokenized_inputs.word_ids(batch_index=i)
+            previous_word_idx = None
+            label_ids = []
+            for word_idx in word_ids:
+                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
+                # ignored in the loss function.
+                if word_idx is None:
+                    label_ids.append(-100)
+                # We set the label for the first token of each word.
+                elif word_idx != previous_word_idx:
+                    label_ids.append(label_to_id[label[word_idx]])
+                # For the other tokens in a word, we set the label to either the current label or -100, depending on
+                # the label_all_tokens flag.
+                else:
+                    label_ids.append(label_to_id[label[word_idx]] if args.label_all_tokens else -100)
+                previous_word_idx = word_idx
 
-            
-    break
+            labels.append(label_ids)
+        tokenized_inputs["labels"] = labels
+        return tokenized_inputs
+    
+    # preparing datasets
+    datasets["train"] = datasets["train"].map(
+        tokenize_and_align_labels,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+    )
+    
+    datasets["validation"] = datasets["validation"].map(
+        tokenize_and_align_labels,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+    )
+    
+    data_collator = DataCollatorForTokenClassification(tokenizer, padding=padding)
+    
+    # Metrics
+    metric = load_metric("seqeval")
 
-    train_pipeline.train(inoculation_train_df, eval_df, 
-                         args.model_path,
-                         training_args, max_length=args.max_seq_length,
-                         inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
-                         scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
+    def compute_metrics(p):
+        predictions, labels = p
+        predictions = np.argmax(predictions, axis=2)
+
+        # Remove ignored index (special tokens)
+        true_predictions = [
+            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+        true_labels = [
+            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+
+        results = metric.compute(predictions=true_predictions, references=true_labels)
+        if data_args.return_entity_level_metrics:
+            # Unpack nested dictionaries
+            final_results = {}
+            for key, value in results.items():
+                if isinstance(value, dict):
+                    for n, v in value.items():
+                        final_results[f"{key}_{n}"] = v
+                else:
+                    final_results[key] = value
+            return final_results
+        else:
+            return {
+                "precision": results["overall_precision"],
+                "recall": results["overall_recall"],
+                "f1": results["overall_f1"],
+                "accuracy": results["overall_accuracy"],
+            }
+        
+    train_dataset = datasets["train"]
+    eval_dataset = datasets["validation"]
+
+    # Log a few random samples from the training set:
+    for index in random.sample(range(len(train_dataset)), 3):
+        logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+        
+    # Initialize our Trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,
+    )
+    
+    # Early stop
+    if args.inoculation_patience_count != -1:
+        trainer.add_callback(EarlyStoppingCallback(args.inoculation_patience_count))
+
+    # Training
+    if training_args.do_train:
+        checkpoint = None
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        metrics = train_result.metrics
+        trainer.save_model()  # Saves the tokenizer too for easy upload
+
+        metrics["train_samples"] = len(train_dataset)
+
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
+        
+    # Evaluation
+    if training_args.do_eval:
+        logger.info("*** Evaluate ***")
+
+        metrics = trainer.evaluate()
+
+        max_val_samples = len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
