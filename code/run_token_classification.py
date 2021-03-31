@@ -216,7 +216,7 @@ if __name__ == "__main__":
                         type=int,
                         help="Random seed")
     parser.add_argument("--metric_for_best_model",
-                        default="Macro-F1",
+                        default="f1",
                         type=str,
                         help="The metric to use to compare two different models.")
     parser.add_argument("--greater_is_better",
@@ -324,21 +324,34 @@ if __name__ == "__main__":
     # we use panda loader now, to make sure it is backward compatible
     # with our file writer.
     pd_format = True
-    if args.inoculation_data_path.split(".")[-1] != "tsv":
+    if "data-files" not in args.inoculation_data_path:
         # here, we download from the huggingface server probably!
         dataset = load_dataset(args.inoculation_data_path)
         inoculation_train_df = dataset["train"]
         eval_df = dataset["validation"]
-    else:
-        train_df = pd.read_csv(args.inoculation_data_path, delimiter="\t")
-        eval_df = pd.read_csv(args.eval_data_path, delimiter="\t")
-        inoculation_step_sample_size = int(len(train_df) * args.inoculation_step_sample_size)
-        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
-        # this may not always start for zero inoculation
-        training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
-        inoculation_train_df = train_df.sample(n=inoculation_step_sample_size, 
-                                               replace=False, 
-                                               random_state=args.seed) # seed here could not a little annoying.
+    else:  
+        pd_format = True
+        if args.inoculation_data_path.split(".")[-1] != "tsv":
+            if len(args.inoculation_data_path.split(".")) > 1:
+                logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
+                pd_format = False
+                datasets = DatasetDict.load_from_disk(args.inoculation_data_path)
+                inoculation_step_sample_size = int(len(datasets["train"]) * args.inoculation_step_sample_size)
+                logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_step_sample_size))
+                # this may not always start for zero inoculation
+                training_args = generate_training_args(args, inoculation_step=inoculation_step_sample_size)
+                datasets["train"] = datasets["train"].shuffle(seed=args.seed)
+                inoculation_train_df = datasets["train"].select(range(inoculation_step_sample_size))
+                eval_df = datasets["validation"]
+                datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
+                if args.eval_sample_limit != -1:
+                    datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
+            else:
+                logger.info(f"***** Loading downloaded huggingface datasets: {args.inoculation_data_path}! *****")
+                pd_format = False
+                if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli", "mrps", "qnli", "conll2003"]:
+                    pass
+                raise NotImplementedError()
     
     text_column_name = TASK_CONFIG[args.task_name][0]
     label_column_name = args.token_type
@@ -495,23 +508,12 @@ if __name__ == "__main__":
         ]
 
         results = metric.compute(predictions=true_predictions, references=true_labels)
-        if data_args.return_entity_level_metrics:
-            # Unpack nested dictionaries
-            final_results = {}
-            for key, value in results.items():
-                if isinstance(value, dict):
-                    for n, v in value.items():
-                        final_results[f"{key}_{n}"] = v
-                else:
-                    final_results[key] = value
-            return final_results
-        else:
-            return {
-                "precision": results["overall_precision"],
-                "recall": results["overall_recall"],
-                "f1": results["overall_f1"],
-                "accuracy": results["overall_accuracy"],
-            }
+        return {
+            "precision": results["overall_precision"],
+            "recall": results["overall_recall"],
+            "f1": results["overall_f1"],
+            "accuracy": results["overall_accuracy"],
+        }
         
     train_dataset = datasets["train"]
     eval_dataset = datasets["validation"]
