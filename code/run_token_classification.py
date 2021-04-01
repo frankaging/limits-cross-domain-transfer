@@ -326,7 +326,7 @@ if __name__ == "__main__":
     pd_format = True
     if "data-files" not in args.inoculation_data_path:
         # here, we download from the huggingface server probably!
-        dataset = load_dataset(args.inoculation_data_path)
+        dataset = load_dataset(args.inoculation_data_path, cache_dir=args.cache_dir) # make sure cache dir is self-contained!
         inoculation_train_df = dataset["train"]
         eval_df = dataset["validation"]
     else:  
