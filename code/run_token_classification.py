@@ -318,7 +318,7 @@ if __name__ == "__main__":
     if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
         os.makedirs(os.environ["TRANSFORMERS_CACHE"])
     TASK_CONFIG = {
-        "conll2003" : ("words", None),
+        "conll2003" : ("tokens", None),
         "en_ewt" : ("tokens", None)
     }
     # we need some prehandling here for token classifications!
