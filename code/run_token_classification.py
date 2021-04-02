@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -318,7 +318,8 @@ if __name__ == "__main__":
     if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
         os.makedirs(os.environ["TRANSFORMERS_CACHE"])
     TASK_CONFIG = {
-        "conll2003" : ("words", None)
+        "conll2003" : ("words", None),
+        "en_ewt" : ("tokens", None)
     }
     # we need some prehandling here for token classifications!
     # we use panda loader now, to make sure it is backward compatible
@@ -326,7 +327,10 @@ if __name__ == "__main__":
     pd_format = True
     if "data-files" not in args.inoculation_data_path:
         # here, we download from the huggingface server probably!
-        dataset = load_dataset(args.inoculation_data_path, cache_dir=args.cache_dir) # make sure cache dir is self-contained!
+        if args.inoculation_data_path == "en_ewt":
+            dataset = load_dataset("universal_dependencies", args.inoculation_data_path, cache_dir=args.cache_dir) # make sure cache dir is self-contained!
+        else:
+            dataset = load_dataset(args.inoculation_data_path, cache_dir=args.cache_dir) # make sure cache dir is self-contained!
         inoculation_train_df = dataset["train"]
         eval_df = dataset["validation"]
     else:  
@@ -349,7 +353,7 @@ if __name__ == "__main__":
             else:
                 logger.info(f"***** Loading downloaded huggingface datasets: {args.inoculation_data_path}! *****")
                 pd_format = False
-                if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli", "mrps", "qnli", "conll2003"]:
+                if args.inoculation_data_path in ["sst3", "cola", "mnli", "snli", "mrps", "qnli", "conll2003", "en_ewt"]:
                     pass
                 raise NotImplementedError()
     
@@ -561,4 +565,10 @@ if __name__ == "__main__":
 
         # trainer.log_metrics("eval", metrics)
         # trainer.save_metrics("eval", metrics)
+
+
+# In[ ]:
+
+
+
 
