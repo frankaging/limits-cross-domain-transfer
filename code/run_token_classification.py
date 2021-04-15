@@ -9,7 +9,6 @@
 from collections import Counter
 import json
 
-from nltk.tokenize import TweetTokenizer
 from sklearn.metrics import classification_report
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
@@ -27,7 +26,6 @@ os.environ["TRANSFORMERS_CACHE"] = "../huggingface_cache/" # Not overload common
 
 import random
 import sys
-from dataclasses import dataclass, field
 from typing import Optional
 import torch
 import argparse
@@ -495,9 +493,9 @@ if __name__ == "__main__":
     data_collator = DataCollatorForTokenClassification(tokenizer, padding=padding)
     
     # Metrics
-    metric = load_metric("seqeval")
+    ner_metric = load_metric("seqeval")
 
-    def compute_metrics(p):
+    def compute_metrics_ner(p):
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
 
@@ -511,12 +509,37 @@ if __name__ == "__main__":
             for prediction, label in zip(predictions, labels)
         ]
 
-        results = metric.compute(predictions=true_predictions, references=true_labels)
+        results = ner_metric.compute(predictions=true_predictions, references=true_labels)
         return {
             "precision": results["overall_precision"],
             "recall": results["overall_recall"],
             "f1": results["overall_f1"],
             "accuracy": results["overall_accuracy"],
+        }
+        
+    def compute_metrics_pos(p):
+        predictions, labels = p
+        predictions = np.argmax(predictions, axis=2)
+
+        # Remove ignored index (special tokens)
+        true_predictions = [
+            [p for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+        true_labels = [
+            [l for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+        
+        true_predictions = [item for sublist in true_predictions for item in sublist]
+        true_labels = [item for sublist in true_labels for item in sublist]
+        
+        result_to_print = classification_report(true_labels, true_predictions, digits=5, output_dict=True)
+        print(classification_report(true_labels, true_predictions, digits=5))
+        
+        return {
+            "f1": result_to_print["macro avg"]["f1-score"],
+            "accuracy": result_to_print["accuracy"],
         }
         
     train_dataset = datasets["train"]
@@ -534,7 +557,7 @@ if __name__ == "__main__":
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         data_collator=data_collator,
-        compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics_pos if args.task_name == "en_ewt" else compute_metrics_ner,
     )
     
     # Early stop
