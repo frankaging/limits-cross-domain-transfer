@@ -1,6 +1,7 @@
 # Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models
 
-There is growing evidence that pretrained language models improve task-specific fine-tuning not just for the languages seen in pretraining, but also for new languages and even non-linguistic data. What is the source of this surprising cross-domain transfer? We offer a partial answer via a systematic exploration of how much transfer occurs when models are denied any information about word identity via random scrambling.
+A Toolkit for a systematic exploration of how much transfer occurs when models are denied any information about word identity via random scrambling.
+Code base for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/TO_APPEAR).
 
 ## Contents
 
