@@ -1,6 +1,6 @@
 # Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models
 
-A Toolkit for a systematic exploration of how much transfer occurs when models are denied any information about word identity via random scrambling.
+Toolkit for a systematic exploration of how much transfer occurs when models are denied any information about word identity via random scrambling.
 Code base for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/TO_APPEAR).
 
 ## Contents
