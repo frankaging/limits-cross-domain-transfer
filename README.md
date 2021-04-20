@@ -17,8 +17,8 @@ Code base for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pre
   @article{wu-etal-2021-identify,
     title={Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models},
     author={Wu, Zhengxuan and Liu, Nelson F. and Potts, Christopher},
-    journal={},
-    url={},
+    journal={arxiv},
+    url={https://arxiv.org/abs/2104.08410},
     year={2021}}
 ```
 
