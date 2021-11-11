@@ -1,3 +1,6 @@
+*/*cache/
+runs/
+*task*/
 emnlp21-*/
 *-matched/
 *-mismatched/

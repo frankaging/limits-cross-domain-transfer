@@ -281,7 +281,8 @@ class HuggingFaceRoBERTaBase:
         if training_args.do_train:
             logger.info("*** Training our model ***")
             trainer.train(
-                model_path=model_path
+                # we don't need this now.
+                # model_path=model_path
             )
             trainer.save_model()  # Saves the tokenizer too for easy upload
         

@@ -34,7 +34,12 @@ from word_forms.word_forms import get_word_forms
 # translator to try it out!
 def corrupt_translator(in_string, tokenizer, vocab_match):
     tokens = tokenizer.tokenize(in_string)
-    translate_tokens = [vocab_match[t] for t in tokens]
+    translate_tokens = []
+    for t in tokens:
+        if t in vocab_match.keys():
+            translate_tokens += [vocab_match[t]]
+        else:
+            translate_tokens += [t]
     out_string = " ".join(translate_tokens).replace(" ##", "").strip()
     return out_string
 
