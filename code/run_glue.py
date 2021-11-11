@@ -427,7 +427,7 @@ def main():
     elif "bert-base-dutch-cased" in model_args.model_name_or_path:
         model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
     elif "deberta-base" in model_args.model_name_or_path:
-        model_args.tokenizer_name =  = "microsoft/deberta-base"
+        model_args.tokenizer_name = "microsoft/deberta-base"
     else:
         model_args.tokenizer_name = model_args.model_name_or_path
         
@@ -604,7 +604,7 @@ def main():
             model_args.tokenizer_name = "bert-base-uncased"
             # need_resize = True
         elif "deberta-base" in model_args.model_name_or_path:
-            model_args.tokenizer_name =  = "microsoft/deberta-base"
+            model_args.tokenizer_name = "microsoft/deberta-base"
             # need_resize = True
         elif "bert-base-cased" in model_args.model_name_or_path:
             model_args.tokenizer_name = "bert-base-cased"
@@ -621,7 +621,7 @@ def main():
             if "bert-base-uncased" in model_args.model_name_or_path:
                 model_args.model_name_or_path = "bert-base-uncased"
             elif "deberta-base" in model_args.model_name_or_path:
-                model_args.model_name_or_path =  = "microsoft/deberta-base"
+                model_args.model_name_or_path = "microsoft/deberta-base"
         
     # Load pretrained model and tokenizer
     #
