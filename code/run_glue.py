@@ -344,12 +344,20 @@ def main():
         elif "bert-base-dutch-cased" in model_args.model_name_or_path:
             out_tokenizer_name = "GroNLP/bert-base-dutch-cased"
             out_reinit_embedding = True
-        else:
+            
+        elif "bert-base-uncased" in model_args.model_name_or_path:
             out_tokenizer_name = "bert-base-uncased"
             if "reinit_emb_True" in model_args.model_name_or_path:
                 out_reinit_embedding = True
             else:
                 out_reinit_embedding = False
+        elif "deberta-base" in model_args.model_name_or_path:
+            out_tokenizer_name = "microsoft/deberta-base"
+            if "reinit_emb_True" in model_args.model_name_or_path:
+                out_reinit_embedding = True
+            else:
+                out_reinit_embedding = False
+                
         if "inoculation_1.0" in model_args.model_name_or_path:
             out_midtuning = True
         elif "inoculation_0.0" in model_args.model_name_or_path:
@@ -418,8 +426,11 @@ def main():
         model_args.tokenizer_name = "flaubert/flaubert_base_cased"
     elif "bert-base-dutch-cased" in model_args.model_name_or_path:
         model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
+    elif "deberta-base" in model_args.model_name_or_path:
+        model_args.tokenizer_name =  = "microsoft/deberta-base"
     else:
         model_args.tokenizer_name = model_args.model_name_or_path
+        
     name_list = model_args.model_name_or_path.split("_")
     
     perturbed_type = ""
@@ -592,6 +603,9 @@ def main():
         elif "bert-base-uncased" in model_args.model_name_or_path:
             model_args.tokenizer_name = "bert-base-uncased"
             # need_resize = True
+        elif "deberta-base" in model_args.model_name_or_path:
+            model_args.tokenizer_name =  = "microsoft/deberta-base"
+            # need_resize = True
         elif "bert-base-cased" in model_args.model_name_or_path:
             model_args.tokenizer_name = "bert-base-cased"
             need_resize = True
@@ -602,9 +616,12 @@ def main():
             model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
             need_resize = True
         else:
-            model_args.tokenizer_name = "bert-base-uncased"
+            assert False
         if training_args.do_train:
-            model_args.model_name_or_path = "bert-base-uncased"
+            if "bert-base-uncased" in model_args.model_name_or_path:
+                model_args.model_name_or_path = "bert-base-uncased"
+            elif "deberta-base" in model_args.model_name_or_path:
+                model_args.model_name_or_path =  = "microsoft/deberta-base"
         
     # Load pretrained model and tokenizer
     #
@@ -620,7 +637,7 @@ def main():
     )
     if training_args.do_train:
         if inoculation_p == 1.0 and os.path.isdir(model_args.model_name_or_path):
-            if "albert-base-v2" in model_args.model_name_or_path or                 "bert-base-cased" in model_args.model_name_or_path or                 "bert-base-uncased" in model_args.model_name_or_path or                 "bert-base-dutch-cased" in model_args.model_name_or_path:
+            if "albert-base-v2" in model_args.model_name_or_path or                 "bert-base-cased" in model_args.model_name_or_path or                 "bert-base-uncased" in model_args.model_name_or_path or                 "deberta-base" in model_args.model_name_or_path or                 "bert-base-dutch-cased" in model_args.model_name_or_path:
                 logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
                 config.type_vocab_size = 2
         if need_resize:
@@ -632,7 +649,7 @@ def main():
             else:
                 config.type_vocab_size = 2
     elif training_args.do_eval or training_args.do_predict:
-        if "albert-base-v2" in model_args.model_name_or_path or             "bert-base-cased" in model_args.model_name_or_path or             "bert-base-uncased" in model_args.model_name_or_path or             "flaubert_base_cased" in model_args.model_name_or_path or             "bert-base-dutch-cased" in model_args.model_name_or_path:
+        if "albert-base-v2" in model_args.model_name_or_path or             "bert-base-cased" in model_args.model_name_or_path or             "bert-base-uncased" in model_args.model_name_or_path or             "deberta-base" in model_args.model_name_or_path or             "flaubert_base_cased" in model_args.model_name_or_path or             "bert-base-dutch-cased" in model_args.model_name_or_path:
             
             config.type_vocab_size = 2
 
@@ -731,6 +748,11 @@ def main():
                 # random_model.resize_token_embeddings(len(tokenizer))
                 replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data.clone()
                 model.bert.embeddings.word_embeddings.weight.data = replacing_embeddings
+            elif "deberta-base" in model_args.model_name_or_path:
+                random_model = AutoModelForSequenceClassification.from_config(config)
+                # random_model.resize_token_embeddings(len(tokenizer))
+                replacing_embeddings = random_model.deberta.embeddings.word_embeddings.weight.data.clone()
+                model.deberta.embeddings.word_embeddings.weight.data = replacing_embeddings
             elif "roberta" in model_args.model_name_or_path:
                 random_model = AutoModelForSequenceClassification.from_config(config)
                 # random_model.resize_token_embeddings(len(tokenizer))
@@ -775,9 +797,10 @@ def main():
     
     if "bert-base-uncased" in model_args.model_name_or_path:
         assert len(tokenizer) == model.bert.embeddings.word_embeddings.weight.data.shape[0]
-    elif "roberta" in model_args.model_name_or_path:
+    elif "roberta-base" in model_args.model_name_or_path:
         assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
-    
+    elif "deberta" in model_args.model_name_or_path:
+        assert len(tokenizer) == model.deberta.embeddings.word_embeddings.weight.data.shape[0]
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {model_args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
