@@ -1,7 +1,7 @@
 # Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models
 
 Toolkit for a systematic exploration of how much transfer occurs when models are denied any information about word identity via random scrambling.
-Code base for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/TO_APPEAR).
+Codebase for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/2104.08410).
 
 ## Contents
 
@@ -11,14 +11,14 @@ Code base for [Identifying the Limits of Cross-Domain Knowledge Transfer for Pre
 
 ## Citation
 
-[Zhengxuan Wu](http://zen-wu.social), [Nelson F. Liu](https://cs.stanford.edu/~nfliu/), [Christopher Potts](http://web.stanford.edu/~cgpotts/). 2021. [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/TO_APPEAR). Ms., Stanford University.
+[Zhengxuan Wu](http://zen-wu.social), [Nelson F. Liu](https://cs.stanford.edu/~nfliu/), [Christopher Potts](http://web.stanford.edu/~cgpotts/). 2021. [Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models](https://arxiv.org/abs/2104.08410). Ms., Stanford University.
 
 ```stex
   @article{wu-etal-2021-identify,
     title={Identifying the Limits of Cross-Domain Knowledge Transfer for Pretrained Models},
     author={Wu, Zhengxuan and Liu, Nelson F. and Potts, Christopher},
-    journal={},
-    url={},
+    journal={arxiv},
+    url={https://arxiv.org/abs/2104.08410},
     year={2021}}
 ```
 
