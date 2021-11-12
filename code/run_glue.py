@@ -331,7 +331,7 @@ def main():
                 break
         assert data_args.task_name in list(task_to_keys.keys())
         out_glue_task = data_args.task_name
-        out_model = "bert-base-uncased"
+
         if "albert-base-v2" in model_args.model_name_or_path:
             out_tokenizer_name = "albert-base-v2"
             out_reinit_embedding = True
@@ -357,7 +357,8 @@ def main():
                 out_reinit_embedding = True
             else:
                 out_reinit_embedding = False
-                
+        out_model = out_tokenizer_name
+
         if "inoculation_1.0" in model_args.model_name_or_path:
             out_midtuning = True
         elif "inoculation_0.0" in model_args.model_name_or_path:
@@ -396,6 +397,10 @@ def main():
             out_lr = 4e-05
         elif "lr_2e-05" in model_args.model_name_or_path:
             out_lr = 2e-05
+        elif "lr_6e-05" in model_args.model_name_or_path:
+            out_lr = 6e-05
+        elif "lr_8e-05" in model_args.model_name_or_path:
+            out_lr = 8e-05
         else:
             out_lr = 2e-05
         
@@ -422,6 +427,8 @@ def main():
         model_args.tokenizer_name = "albert-base-v2"
     elif "bert-base-cased" in model_args.model_name_or_path:
         model_args.tokenizer_name = "bert-base-cased"
+    elif "bert-base-uncased" in model_args.model_name_or_path:
+        model_args.tokenizer_name = "bert-base-uncased"
     elif "flaubert_base_cased" in model_args.model_name_or_path:
         model_args.tokenizer_name = "flaubert/flaubert_base_cased"
     elif "bert-base-dutch-cased" in model_args.model_name_or_path:
@@ -1061,7 +1068,7 @@ def main():
                 csv_writer.writerow([
                     "glue_task", "split", "model", "learning_rate", "tokenizer", "midtuning",
                     "galactic_shift", "reinit_embedding", "reverse_order", "random_order", 
-                    "token_swap", "word_swap", "metrics", "performance"
+                    "token_swap", "word_swap", "word_swap_frequency", "metrics", "performance"
                 ])
             
         logger.info("*** Evaluate ***")
@@ -1090,7 +1097,7 @@ def main():
                     csv_writer.writerow([
                         task, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
                         out_galactic_shift, out_reinit_embedding, out_reverse, out_random, 
-                        out_token_s, out_word_s, m, metrics[f"eval_{m}"],
+                        out_token_s, out_word_s, out_word_freq_s, m, metrics[f"eval_{m}"],
                     ])
             
     if training_args.do_predict:
